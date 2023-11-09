@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ボス討伐記録フォーム</title>
+<style>
+  body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 20px;
+  }
+
+  #currentTime {
+    margin-bottom: 20px;
+    font-size: 20px;
+    font-weight: bold;
+  }
+
+  label {
+    display: block;
+    margin: 10px 0 5px;
+  }
+
+  select, input, button {
+    padding: 10px;
+    margin-right: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+  }
+
+  button {
+    background-color: #5cb85c;
+    color: white;
+    cursor: pointer;
+  }
+
+  button:hover {
+    background-color: #4cae4c;
+  }
+
+  #records div {
+    background-color: white;
+    border: 1px solid #ddd;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    position: relative;
+  }
+
+  .record-actions {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+  }
+
+  .delete-button {
+    margin-left: 10px;
+    background-color: #d9534f;
+  }
+
+  .delete-button:hover {
+    background-color: #c9302c;
+  }
+</style>
+<script>
+  const bosses = {
+    "N Beh": 6, "N Fio": 6, "H Beh": 6, "H Fio": 6,
+    "N Mau": 12, "N Gaius": 12, "H Mau": 12, "H Gaius": 12,
+    "Chiron": 12, "N Morte": 24, "H Morte": 24,
+    "N Sebek": 24, "H Sebek": 24
+  };
+
+  let records = [];
+
+  function loadRecords() {
+    const savedRecords = localStorage.getItem('records');
+    records = savedRecords ? JSON.parse(savedRecords) : [];
+  }
+
+  function saveRecords() {
+    localStorage.setItem('records', JSON.stringify(records));
+  }
+
+  function updateCurrentTime() {
+    const now = new Date();
+    const timeString = now.toLocaleString('ja-JP', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    }).replace(/\//g, '-');
+    document.getElementById('currentTime').textContent = `現在時刻: ${timeString}`;
+  }
+
+  function createCopyButton(respawnTime, bossName) {
+    const button = document.createElement('button');
+    button.textContent = 'コピー';
+    button.onclick = () => {
+      const formattedTime = respawnTime.toLocaleString('ja-JP', {
+        hour: '2-digit', minute: '2-digit'
+      }).replace(/(\d{2}):(\d{2})/, '$1:$2');
+      const command = `/remind time:${formattedTime} content:@everyone ${bossName} channels: #ボスリポップ／boss-repop timezone:Japan`;
+      navigator.clipboard.writeText(command);
+      alert('コピーしました: ' + command);
+    };
+    return button;
+  }
+
+  function createDeleteButton(bossName) {
+    const button = document.createElement('button');
+    button.classList.add('delete-button');
+    button.textContent = '削除';
+    button.onclick = () => {
+      const confirmDelete = confirm(`${bossName}の記録を削除してもよろしいですか？`);
+      if (confirmDelete) {
+        records = records.filter(record => record.bossName !== bossName);
+        saveRecords();
+        updateRecordList();
+      }
+    };
+    return button;
+  }
+
+  function saveRecord() {
+    const bossSelect = document.getElementById('bossName');
+    const bossName = bossSelect.value;
+    const defeatTimeInput = document.getElementById('defeatTime');
+    const defeatTime = new Date(defeatTimeInput.value);
+
+    if (!bossName || !defeatTimeInput.value) {
+      alert('ボス名と討伐時間を入力してください。');
+      return;
+    }
+
+    const respawnDelay = bosses[bossName] * 60 * 60 * 1000; // hours to milliseconds
+    const respawnTime = new Date(defeatTime.getTime() + respawnDelay);
+
+    const existingRecordIndex = records.findIndex(record => record.bossName === bossName);
+    if (existingRecordIndex !== -1) {
+      records[existingRecordIndex].defeatTime = defeatTime;
+      records[existingRecordIndex].respawnTime = respawnTime;
+    } else {
+      records.push({ bossName, defeatTime, respawnTime });
+    }
+
+    saveRecords();
+    updateRecordList();
+  }
+
+  function updateRecordList() {
+    const list = document.getElementById('records');
+    list.innerHTML = '';
+    records.sort((a, b) => a.respawnTime - b.respawnTime);
+    records.forEach(record => {
+      const div = document.createElement('div');
+      const defeatTimeString = record.defeatTime.toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      }).replace(/\//g, '-');
+      const respawnTimeString = record.respawnTime.toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      }).replace(/\//g, '-');
+
+      div.innerHTML = `
+        <strong>${record.bossName}</strong><br>
+        討伐時間: ${defeatTimeString}<br>
+        次回出現時間: ${respawnTimeString}
+      `;
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'record-actions';
+      const copyButton = createCopyButton(record.respawnTime, record.bossName);
+      const deleteButton = createDeleteButton(record.bossName);
+      actionsDiv.appendChild(copyButton);
+      actionsDiv.appendChild(deleteButton);
+      div.appendChild(actionsDiv);
+      list.appendChild(div);
+    });
+  }
+
+  window.onload = function() {
+    updateCurrentTime();
+    loadRecords();
+    updateRecordList();
+    setInterval(updateCurrentTime, 60000);
+  };
+</script>
+</head>
+<body>
+<div id="currentTime">現在時刻: ---</div>
+<div style="background-color: white; padding: 20px; border-radius: 5px;">
+  <label for="bossName">ボス名:</label>
+  <select id="bossName">
+    <option value="">選択してください</option>
+    <script>
+      Object.keys(bosses).forEach(bossName => {
+        const option = document.createElement('option');
+        option.value = bossName;
+        option.textContent = bossName;
+        document.getElementById('bossName').appendChild(option);
+      });
+    </script>
+  </select>
+
+  <label for="defeatTime">討伐時間:</label>
+  <input type="datetime-local" id="defeatTime">
+
+  <button onclick="saveRecord()">記録</button>
+</div>
+<div id="records"></div>
+</body>
+</html>
